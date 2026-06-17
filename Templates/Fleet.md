@@ -6,4 +6,4 @@ tags:
 
 📅 {{date:YYYY-MM-DD (ddd)}}
 
-## ノート
+## 副題
