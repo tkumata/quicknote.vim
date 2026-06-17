@@ -28,6 +28,9 @@ augroup END
 
 command! NoteToday call s:open_daily_note()
 command! -nargs=1 NoteLiterature call s:create_literature_note(<f-args>)
+command! -nargs=1 NoteFleet call s:open_collection_note('Fleet', <q-args>)
+command! NoteSearch call s:note_search()
+command! -nargs=* NoteGrep call s:note_grep(<q-args>)
 
 function! s:open_wiki_link() abort
   let l:link_text = s:link_under_cursor()
@@ -37,15 +40,20 @@ function! s:open_wiki_link() abort
     return
   endif
 
-  let l:file = l:link_text . '.md'
+  let l:file = s:normalize_note_name(l:link_text)
+  if empty(l:file)
+    call s:show_error('No valid [[link]] found under cursor!')
+    return
+  endif
+
   let l:find_cmd = 'find ' . shellescape(s:quicknote_root) . ' -type f -name ' . shellescape(l:file)
   let l:found_files = systemlist(l:find_cmd)
 
   if len(l:found_files) == 0
-    echoerr 'File ' . l:file . ' not found in ' . s:quicknote_root
+    call s:open_collection_note('Fleet', l:link_text)
   elseif len(l:found_files) == 1
     execute 'edit ' . fnameescape(l:found_files[0])
-  elseif exists(':FZF')
+  elseif s:has_fzf_picker()
     call fzf#run(fzf#wrap({
       \ 'source': l:found_files,
       \ 'sink': 'edit'
@@ -96,8 +104,13 @@ endfunction
 
 function! s:create_literature_note(name) abort
   let l:target_dir = s:quicknote_path('Literature')
-  let l:title = a:name
-  let l:filename = l:title =~# '\.md$' ? l:title : l:title . '.md'
+  let l:filename = s:normalize_note_name(a:name)
+  if empty(l:filename)
+    call s:show_error('Note name is empty')
+    return
+  endif
+
+  let l:title = s:note_title_from_name(l:filename)
   let l:filepath = s:quicknote_path('Literature', l:filename)
   let l:template = s:template_path('Literature.md')
 
@@ -120,16 +133,143 @@ function! s:create_literature_note(name) abort
   execute 'edit ' . fnameescape(l:filepath)
 endfunction
 
+function! s:open_collection_note(collection, name) abort
+  let l:filename = s:normalize_note_name(a:name)
+  if empty(l:filename)
+    call s:show_error('Note name is empty')
+    return
+  endif
+
+  let l:title = s:note_title_from_name(l:filename)
+  let l:target_dir = s:quicknote_path(a:collection)
+  let l:filepath = s:quicknote_path(a:collection, l:filename)
+
+  call s:ensure_directory(l:target_dir)
+
+  if !filereadable(l:filepath)
+    call s:create_basic_note(l:filepath, l:title)
+    echo 'Note created: ' . l:filepath
+  else
+    echo 'Note already exists: ' . l:filepath
+  endif
+
+  execute 'edit ' . fnameescape(l:filepath)
+endfunction
+
+function! s:note_search() abort
+  if !s:has_fzf_picker()
+    call s:show_error('FZF is required for :NoteSearch')
+    return
+  endif
+
+  let l:source = systemlist(s:markdown_find_command())
+  call fzf#run(fzf#wrap({
+    \ 'source': l:source,
+    \ 'sink': 'edit',
+    \ 'options': '--prompt=NoteSearch> '
+    \ }))
+endfunction
+
+function! s:note_grep(query) abort
+  if !s:has_fzf_picker()
+    call s:show_error('FZF is required for :NoteGrep')
+    return
+  endif
+
+  let l:query = s:trim(a:query)
+  if empty(l:query)
+    let l:query = input('NoteGrep: ')
+    if empty(s:trim(l:query))
+      return
+    endif
+  endif
+
+  let l:results = systemlist(s:grep_command(l:query))
+  if v:shell_error > 1
+    call s:show_error('grep failed for :NoteGrep')
+    return
+  endif
+  if empty(l:results)
+    echo 'No matches: ' . l:query
+    return
+  endif
+
+  call fzf#run(fzf#wrap('NoteGrep', {
+    \ 'source': l:results,
+    \ 'sink': function('<SID>open_grep_result'),
+    \ 'options': ['--prompt=NoteGrep> ', '--delimiter=:', '--nth=1,2,3..']
+    \ }))
+endfunction
+
 function! s:ensure_directory(path) abort
   if !isdirectory(a:path)
     call mkdir(a:path, 'p')
   endif
 endfunction
 
+function! s:create_basic_note(filepath, title) abort
+  call writefile(['# ' . a:title, '', 'Created: ' . strftime('%Y-%m-%d %H:%M'), ''], a:filepath)
+endfunction
+
 function! s:write_template(template, filepath, title) abort
   let l:lines = readfile(a:template)
   let l:processed = map(l:lines, { _, line -> s:apply_template(line, a:title) })
   call writefile(l:processed, a:filepath)
+endfunction
+
+function! s:normalize_note_name(name) abort
+  let l:name = s:trim(a:name)
+  let l:name = substitute(l:name, '[\\/]', '-', 'g')
+  if empty(l:name)
+    return ''
+  endif
+
+  return l:name =~# '\.md$' ? l:name : l:name . '.md'
+endfunction
+
+function! s:note_title_from_name(name) abort
+  return substitute(a:name, '\.md$', '', '')
+endfunction
+
+function! s:trim(value) abort
+  return substitute(a:value, '^\s*\|\s*$', '', 'g')
+endfunction
+
+function! s:markdown_find_command() abort
+  return 'find ' . shellescape(s:quicknote_root) . ' -type f -name ' . shellescape('*.md')
+endfunction
+
+function! s:grep_command(query) abort
+  return 'grep -RIn --include=' . shellescape('*.md') . ' -- ' . shellescape(a:query) . ' ' . shellescape(s:quicknote_root)
+endfunction
+
+function! s:has_fzf_picker() abort
+  return exists(':FZF')
+endfunction
+
+function! s:show_error(message) abort
+  echohl ErrorMsg
+  echom a:message
+  echohl None
+endfunction
+
+function! s:open_grep_result(line) abort
+  let l:match = matchlist(a:line, '^\(.\{-}\):\([0-9]\+\):')
+  if empty(l:match)
+    call s:show_error('Invalid grep result: ' . a:line)
+    return
+  endif
+
+  let l:file = l:match[1]
+  let l:line_number = str2nr(l:match[2])
+  if !filereadable(l:file)
+    call s:show_error('Grep result file not found: ' . l:file)
+    return
+  endif
+
+  execute 'edit ' . fnameescape(l:file)
+  execute l:line_number
+  normal! zz
 endfunction
 
 function! s:jump_to_cursor_token() abort
