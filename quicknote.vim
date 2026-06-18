@@ -34,6 +34,7 @@ command! -nargs=1 NoteLiterature call s:create_literature_note(<f-args>)
 command! -nargs=1 NoteFleet call s:open_collection_note('Fleet', <q-args>)
 command! NoteSearch call s:note_search()
 command! -nargs=* NoteGrep call s:note_grep(<q-args>)
+command! NoteBacklinks call s:note_backlinks()
 
 function! s:pair(open, close) abort
   return a:open . a:close . "\<Left>"
@@ -208,6 +209,40 @@ function! s:note_grep(query) abort
     \ }))
 endfunction
 
+function! s:note_backlinks() abort
+  if !s:has_fzf_picker()
+    call s:show_error('FZF is required for :NoteBacklinks')
+    return
+  endif
+
+  let l:names = s:current_note_names()
+  if empty(l:names)
+    call s:show_error('Current buffer is not a QuickNote markdown file')
+    return
+  endif
+
+  let l:results = []
+  for l:name in l:names
+    let l:results += systemlist(s:grep_fixed_command('[[' . l:name . ']]'))
+    if v:shell_error > 1
+      call s:show_error('grep failed for :NoteBacklinks')
+      return
+    endif
+  endfor
+
+  let l:results = s:unique_lines(l:results)
+  if empty(l:results)
+    echo 'No backlinks: ' . join(l:names, ', ')
+    return
+  endif
+
+  call fzf#run(fzf#wrap('NoteBacklinks', {
+    \ 'source': l:results,
+    \ 'sink': function('<SID>open_grep_result'),
+    \ 'options': ['--prompt=NoteBacklinks> ', '--delimiter=:', '--nth=1,2,3..']
+    \ }))
+endfunction
+
 function! s:ensure_directory(path) abort
   if !isdirectory(a:path)
     call mkdir(a:path, 'p')
@@ -238,6 +273,67 @@ function! s:note_title_from_name(name) abort
   return substitute(a:name, '\.md$', '', '')
 endfunction
 
+function! s:current_note_names() abort
+  let l:filename = expand('%:t')
+  if !s:is_quicknote_markdown_file() || empty(l:filename)
+    return []
+  endif
+
+  return s:unique_trimmed_values([
+    \ s:note_title_from_name(l:filename),
+    \ s:first_markdown_title()
+    \ ])
+endfunction
+
+function! s:is_quicknote_markdown_file() abort
+  let l:filepath = expand('%:p')
+  if empty(l:filepath) || expand('%:e') !=# 'md'
+    return 0
+  endif
+
+  let l:root = substitute(fnamemodify(s:quicknote_root, ':p'), '/$', '', '') . '/'
+  return l:filepath[:strlen(l:root) - 1] ==# l:root
+endfunction
+
+function! s:first_markdown_title() abort
+  for l:line in getline(1, '$')
+    if l:line =~# '^#\s\+'
+      return s:trim(substitute(l:line, '^#\s\+', '', ''))
+    endif
+  endfor
+
+  return ''
+endfunction
+
+function! s:unique_trimmed_values(values) abort
+  let l:seen = {}
+  let l:unique = []
+  for l:value in a:values
+    let l:value = s:trim(l:value)
+    if empty(l:value) || has_key(l:seen, l:value)
+      continue
+    endif
+    let l:seen[l:value] = 1
+    call add(l:unique, l:value)
+  endfor
+
+  return l:unique
+endfunction
+
+function! s:unique_lines(lines) abort
+  let l:seen = {}
+  let l:unique = []
+  for l:line in a:lines
+    if empty(l:line) || has_key(l:seen, l:line)
+      continue
+    endif
+    let l:seen[l:line] = 1
+    call add(l:unique, l:line)
+  endfor
+
+  return l:unique
+endfunction
+
 function! s:trim(value) abort
   return substitute(a:value, '^\s*\|\s*$', '', 'g')
 endfunction
@@ -248,6 +344,10 @@ endfunction
 
 function! s:grep_command(query) abort
   return 'grep -RIn --include=' . shellescape('*.md') . ' -- ' . shellescape(a:query) . ' ' . shellescape(s:quicknote_root)
+endfunction
+
+function! s:grep_fixed_command(query) abort
+  return 'grep -RInF --include=' . shellescape('*.md') . ' -- ' . shellescape(a:query) . ' ' . shellescape(s:quicknote_root)
 endfunction
 
 function! s:has_fzf_picker() abort
