@@ -24,6 +24,9 @@ let $FZF_DEFAULT_COMMAND = 'find ' . shellescape(s:quicknote_root) . ' -type f -
 augroup quicknote
   autocmd!
   autocmd FileType markdown nnoremap <buffer> <Enter> :call <SID>open_wiki_link()<CR>
+  autocmd FileType markdown inoremap <buffer> <expr> ( <SID>pair('(', ')')
+  autocmd FileType markdown inoremap <buffer> <expr> [ <SID>pair('[', ']')
+  autocmd FileType markdown inoremap <buffer> <expr> { <SID>pair('{', '}')
 augroup END
 
 command! NoteToday call s:open_daily_note()
@@ -31,6 +34,10 @@ command! -nargs=1 NoteLiterature call s:create_literature_note(<f-args>)
 command! -nargs=1 NoteFleet call s:open_collection_note('Fleet', <q-args>)
 command! NoteSearch call s:note_search()
 command! -nargs=* NoteGrep call s:note_grep(<q-args>)
+
+function! s:pair(open, close) abort
+  return a:open . a:close . "\<Left>"
+endfunction
 
 function! s:open_wiki_link() abort
   let l:link_text = s:link_under_cursor()
