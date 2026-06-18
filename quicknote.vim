@@ -62,9 +62,10 @@ function! s:open_wiki_link() abort
   elseif len(l:found_files) == 1
     execute 'edit ' . fnameescape(l:found_files[0])
   elseif s:has_fzf_picker()
+    let l:previous_window = winnr('#')
     call fzf#run(fzf#wrap({
       \ 'source': l:found_files,
-      \ 'sink': 'edit'
+      \ 'sink': function('<SID>open_note_from_picker', [l:previous_window])
       \ }))
   else
     echo 'Multiple files found: ' . join(l:found_files, ', ')
@@ -171,9 +172,10 @@ function! s:note_search() abort
   endif
 
   let l:source = systemlist(s:markdown_find_command())
+  let l:previous_window = winnr('#')
   call fzf#run(fzf#wrap({
     \ 'source': l:source,
-    \ 'sink': 'edit',
+    \ 'sink': function('<SID>open_note_from_picker', [l:previous_window]),
     \ 'options': '--prompt=NoteSearch> '
     \ }))
 endfunction
@@ -202,9 +204,10 @@ function! s:note_grep(query) abort
     return
   endif
 
+  let l:previous_window = winnr('#')
   call fzf#run(fzf#wrap('NoteGrep', {
     \ 'source': l:results,
-    \ 'sink': function('<SID>open_grep_result'),
+    \ 'sink': function('<SID>open_grep_result', [l:previous_window]),
     \ 'options': ['--prompt=NoteGrep> ', '--delimiter=:', '--nth=1,2,3..']
     \ }))
 endfunction
@@ -236,9 +239,10 @@ function! s:note_backlinks() abort
     return
   endif
 
+  let l:previous_window = winnr('#')
   call fzf#run(fzf#wrap('NoteBacklinks', {
     \ 'source': l:results,
-    \ 'sink': function('<SID>open_grep_result'),
+    \ 'sink': function('<SID>open_grep_result', [l:previous_window]),
     \ 'options': ['--prompt=NoteBacklinks> ', '--delimiter=:', '--nth=1,2,3..']
     \ }))
 endfunction
@@ -360,7 +364,22 @@ function! s:show_error(message) abort
   echohl None
 endfunction
 
-function! s:open_grep_result(line) abort
+function! s:open_note_from_picker(previous_window, file) abort
+  execute 'edit ' . fnameescape(a:file)
+  call s:restore_previous_window(a:previous_window)
+endfunction
+
+function! s:restore_previous_window(previous_window) abort
+  let l:current_window = winnr()
+  if a:previous_window <= 0 || a:previous_window > winnr('$') || a:previous_window == l:current_window
+    return
+  endif
+
+  execute a:previous_window . 'wincmd w'
+  execute l:current_window . 'wincmd w'
+endfunction
+
+function! s:open_grep_result(previous_window, line) abort
   let l:match = matchlist(a:line, '^\(.\{-}\):\([0-9]\+\):')
   if empty(l:match)
     call s:show_error('Invalid grep result: ' . a:line)
@@ -377,6 +396,7 @@ function! s:open_grep_result(line) abort
   execute 'edit ' . fnameescape(l:file)
   execute l:line_number
   normal! zz
+  call s:restore_previous_window(a:previous_window)
 endfunction
 
 function! s:jump_to_cursor_token() abort
