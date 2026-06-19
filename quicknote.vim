@@ -35,6 +35,7 @@ command! -nargs=1 NoteFleet call s:open_collection_note('Fleet', <q-args>)
 command! NoteSearch call s:note_search()
 command! -nargs=* NoteGrep call s:note_grep(<q-args>)
 command! NoteBacklinks call s:note_backlinks()
+command! -nargs=1 NoteTag call s:note_tag(<q-args>)
 
 function! s:pair(open, close) abort
   return a:open . a:close . "\<Left>"
@@ -247,6 +248,32 @@ function! s:note_backlinks() abort
     \ }))
 endfunction
 
+function! s:note_tag(tag) abort
+  let l:tag = s:trim(a:tag)
+  if empty(l:tag)
+    call s:show_error('Tag is empty')
+    return
+  endif
+
+  if !s:has_fzf_picker()
+    call s:show_error('FZF is required for :NoteTag')
+    return
+  endif
+
+  let l:source = s:tagged_note_files(l:tag)
+  if empty(l:source)
+    echo 'No notes tagged: ' . l:tag
+    return
+  endif
+
+  let l:previous_window = winnr('#')
+  call fzf#run(fzf#wrap('NoteTag', {
+    \ 'source': l:source,
+    \ 'sink': function('<SID>open_note_from_picker', [l:previous_window]),
+    \ 'options': '--prompt=NoteTag> '
+    \ }))
+endfunction
+
 function! s:ensure_directory(path) abort
   if !isdirectory(a:path)
     call mkdir(a:path, 'p')
@@ -336,6 +363,63 @@ function! s:unique_lines(lines) abort
   endfor
 
   return l:unique
+endfunction
+
+function! s:tagged_note_files(tag) abort
+  let l:files = systemlist(s:markdown_find_command())
+  if v:shell_error != 0
+    return []
+  endif
+
+  let l:tagged_files = []
+  for l:file in l:files
+    if s:note_has_frontmatter_tag(l:file, a:tag)
+      call add(l:tagged_files, l:file)
+    endif
+  endfor
+
+  return l:tagged_files
+endfunction
+
+function! s:note_has_frontmatter_tag(file, tag) abort
+  if !filereadable(a:file)
+    return 0
+  endif
+
+  try
+    let l:lines = readfile(a:file)
+  catch
+    return 0
+  endtry
+
+  if empty(l:lines) || l:lines[0] !~# '^---\s*$'
+    return 0
+  endif
+
+  let l:in_tags = 0
+  for l:line in l:lines[1:]
+    if l:line =~# '^---\s*$'
+      return 0
+    endif
+
+    if !l:in_tags
+      if l:line =~# '^\s*tags:\s*$'
+        let l:in_tags = 1
+      endif
+      continue
+    endif
+
+    let l:tag_match = matchlist(l:line, '^\s*-\s*\(.\{-}\)\s*$')
+    if !empty(l:tag_match) && s:trim(l:tag_match[1]) ==# a:tag
+      return 1
+    endif
+
+    if l:line =~# '^\S.\{-}:\s*.*$'
+      return 0
+    endif
+  endfor
+
+  return 0
 endfunction
 
 function! s:trim(value) abort
