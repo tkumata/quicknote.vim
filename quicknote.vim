@@ -35,6 +35,7 @@ command! -nargs=1 NoteFleet call s:open_collection_note('Fleet', <q-args>)
 command! NoteSearch call s:note_search()
 command! -nargs=* NoteGrep call s:note_grep(<q-args>)
 command! NoteBacklinks call s:note_backlinks()
+command! NoteBrokenLinks call s:note_broken_links()
 command! -nargs=1 NoteTag call s:note_tag(<q-args>)
 command! NoteTags call s:note_tags()
 
@@ -249,6 +250,32 @@ function! s:note_backlinks() abort
     \ }))
 endfunction
 
+function! s:note_broken_links() abort
+  if !s:has_fzf_picker()
+    call s:show_error('FZF is required for :NoteBrokenLinks')
+    return
+  endif
+
+  let l:files = systemlist(s:markdown_find_command())
+  if v:shell_error != 0
+    call s:show_error('find failed for :NoteBrokenLinks')
+    return
+  endif
+
+  let l:results = s:broken_link_results(l:files)
+  if empty(l:results)
+    echo 'No broken links'
+    return
+  endif
+
+  let l:previous_window = winnr('#')
+  call fzf#run(fzf#wrap('NoteBrokenLinks', {
+    \ 'source': l:results,
+    \ 'sink': function('<SID>open_grep_result', [l:previous_window]),
+    \ 'options': ['--prompt=NoteBrokenLinks> ', '--delimiter=:', '--nth=1,2,3..']
+    \ }))
+endfunction
+
 function! s:note_tag(tag) abort
   let l:tag = s:trim(a:tag)
   if empty(l:tag)
@@ -398,6 +425,59 @@ function! s:unique_lines(lines) abort
   endfor
 
   return l:unique
+endfunction
+
+function! s:broken_link_results(files) abort
+  let l:note_names = s:note_file_name_index(a:files)
+  let l:results = []
+
+  for l:file in a:files
+    if !filereadable(l:file)
+      continue
+    endif
+
+    try
+      let l:lines = readfile(l:file)
+    catch
+      continue
+    endtry
+
+    for l:index in range(0, len(l:lines) - 1)
+      for l:link in s:wiki_links_in_line(l:lines[l:index])
+        let l:filename = s:normalize_note_name(l:link)
+        if !empty(l:filename) && !has_key(l:note_names, l:filename)
+          call add(l:results, l:file . ':' . (l:index + 1) . ':' . l:lines[l:index])
+          break
+        endif
+      endfor
+    endfor
+  endfor
+
+  return s:unique_lines(l:results)
+endfunction
+
+function! s:note_file_name_index(files) abort
+  let l:names = {}
+  for l:file in a:files
+    let l:names[fnamemodify(l:file, ':t')] = 1
+  endfor
+  return l:names
+endfunction
+
+function! s:wiki_links_in_line(line) abort
+  let l:links = []
+  let l:start = 0
+
+  while 1
+    let l:matches = matchlist(a:line, '\[\[\(.\{-}\)\]\]', l:start)
+    if empty(l:matches)
+      return l:links
+    endif
+
+    call add(l:links, s:trim(l:matches[1]))
+    let l:link_start = match(a:line, '\[\[\(.\{-}\)\]\]', l:start)
+    let l:start = l:link_start + strlen(l:matches[0])
+  endwhile
 endfunction
 
 function! s:tagged_note_files(tag) abort
