@@ -1,0 +1,16 @@
+Installation and Setup
+
+1. `:PlugInstall`
+2. `:NoteInit`
+3. `:NoteToday`
+
+For example,
+>
+    call plug#begin()
+
+    " List your plugins here
+    Plug 'tkumata/quicknote.vim'
+
+    call plug#end()
+<
+Reload the file or restart Vim, then you can,

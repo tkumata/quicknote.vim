@@ -14,6 +14,7 @@ call plug#begin('~/.vim/plugged')
   Plug 'junegunn/fzf.vim'
   Plug 'rbtnn/vim-ambiwidth'
   Plug 'joshdick/onedark.vim'
+  Plug 'tkumata/quicknote.vim'
 call plug#end()
 
 " Basic settings
