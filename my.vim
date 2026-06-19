@@ -1,5 +1,6 @@
 " Manage plugins
 call plug#begin('~/.vim/plugged')
+
   Plug 'preservim/nerdtree'
   Plug 'vim-airline/vim-airline'
   Plug 'vim-airline/vim-airline-themes'
@@ -15,7 +16,10 @@ call plug#begin('~/.vim/plugged')
   Plug 'rbtnn/vim-ambiwidth'
   Plug 'joshdick/onedark.vim'
   Plug 'tkumata/quicknote.vim'
+
 call plug#end()
+
+let g:quicknote_root = '~/Documents/QuickNote'
 
 " Basic settings
 set cursorline
