@@ -36,6 +36,7 @@ command! NoteSearch call s:note_search()
 command! -nargs=* NoteGrep call s:note_grep(<q-args>)
 command! NoteBacklinks call s:note_backlinks()
 command! -nargs=1 NoteTag call s:note_tag(<q-args>)
+command! NoteTags call s:note_tags()
 
 function! s:pair(open, close) abort
   return a:open . a:close . "\<Left>"
@@ -260,16 +261,50 @@ function! s:note_tag(tag) abort
     return
   endif
 
+  let l:previous_window = winnr('#')
+  call s:open_tagged_notes(l:tag, l:previous_window)
+endfunction
+
+function! s:note_tags() abort
+  if !s:has_fzf_picker()
+    call s:show_error('FZF is required for :NoteTags')
+    return
+  endif
+
+  let l:source = s:all_note_tags()
+  if empty(l:source)
+    echo 'No tags found'
+    return
+  endif
+
+  let l:previous_window = winnr('#')
+  call fzf#run(fzf#wrap('NoteTags', {
+    \ 'source': l:source,
+    \ 'sink': function('<SID>open_tag_from_picker', [l:previous_window]),
+    \ 'options': '--prompt=NoteTags> '
+    \ }))
+endfunction
+
+function! s:open_tag_from_picker(previous_window, tag) abort
+  call s:open_tagged_notes(a:tag, a:previous_window)
+endfunction
+
+function! s:open_tagged_notes(tag, previous_window) abort
+  let l:tag = s:trim(a:tag)
+  if empty(l:tag)
+    call s:show_error('Tag is empty')
+    return
+  endif
+
   let l:source = s:tagged_note_files(l:tag)
   if empty(l:source)
     echo 'No notes tagged: ' . l:tag
     return
   endif
 
-  let l:previous_window = winnr('#')
   call fzf#run(fzf#wrap('NoteTag', {
     \ 'source': l:source,
-    \ 'sink': function('<SID>open_note_from_picker', [l:previous_window]),
+    \ 'sink': function('<SID>open_note_from_picker', [a:previous_window]),
     \ 'options': '--prompt=NoteTag> '
     \ }))
 endfunction
@@ -381,25 +416,44 @@ function! s:tagged_note_files(tag) abort
   return l:tagged_files
 endfunction
 
+function! s:all_note_tags() abort
+  let l:files = systemlist(s:markdown_find_command())
+  if v:shell_error != 0
+    return []
+  endif
+
+  let l:tags = []
+  for l:file in l:files
+    let l:tags += s:frontmatter_tags(l:file)
+  endfor
+
+  return sort(s:unique_trimmed_values(l:tags))
+endfunction
+
 function! s:note_has_frontmatter_tag(file, tag) abort
+  return index(s:frontmatter_tags(a:file), a:tag) >= 0
+endfunction
+
+function! s:frontmatter_tags(file) abort
   if !filereadable(a:file)
-    return 0
+    return []
   endif
 
   try
     let l:lines = readfile(a:file)
   catch
-    return 0
+    return []
   endtry
 
   if empty(l:lines) || l:lines[0] !~# '^---\s*$'
-    return 0
+    return []
   endif
 
   let l:in_tags = 0
+  let l:tags = []
   for l:line in l:lines[1:]
     if l:line =~# '^---\s*$'
-      return 0
+      return l:tags
     endif
 
     if !l:in_tags
@@ -410,16 +464,17 @@ function! s:note_has_frontmatter_tag(file, tag) abort
     endif
 
     let l:tag_match = matchlist(l:line, '^\s*-\s*\(.\{-}\)\s*$')
-    if !empty(l:tag_match) && s:trim(l:tag_match[1]) ==# a:tag
-      return 1
+    if !empty(l:tag_match)
+      call add(l:tags, s:trim(l:tag_match[1]))
+      continue
     endif
 
     if l:line =~# '^\S.\{-}:\s*.*$'
-      return 0
+      return l:tags
     endif
   endfor
 
-  return 0
+  return l:tags
 endfunction
 
 function! s:trim(value) abort
