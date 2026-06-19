@@ -1,6 +1,12 @@
 " QuickNote root can be overridden before sourcing this file:
 "   let g:quicknote_root = '~/Documents/QuickNote'
+if exists('g:loaded_quicknote')
+  finish
+endif
+let g:loaded_quicknote = 1
+
 let s:quicknote_root = substitute(expand(get(g:, 'quicknote_root', '~/Documents/QuickNote')), '/$', '', '')
+let s:quicknote_repo_root = fnamemodify(expand('<sfile>:p'), ':h:h')
 
 function! s:quicknote_path(...) abort
   return join([s:quicknote_root] + a:000, '/')
@@ -8,6 +14,10 @@ endfunction
 
 function! s:template_path(name) abort
   return s:quicknote_path('Templates', a:name)
+endfunction
+
+function! s:repo_path(...) abort
+  return join([s:quicknote_repo_root] + a:000, '/')
 endfunction
 
 " Vimwiki
@@ -30,6 +40,7 @@ augroup quicknote
 augroup END
 
 command! NoteToday call s:open_daily_note()
+command! NoteInit call s:note_init()
 command! -nargs=1 NoteLiterature call s:create_literature_note(<f-args>)
 command! -nargs=1 NoteFleet call s:open_collection_note('Fleet', <q-args>)
 command! NoteSearch call s:note_search()
@@ -41,6 +52,20 @@ command! NoteTags call s:note_tags()
 
 function! s:pair(open, close) abort
   return a:open . a:close . "\<Left>"
+endfunction
+
+function! s:note_init() abort
+  try
+    call s:ensure_directory(s:quicknote_root)
+    for l:directory in ['Daily', 'Fleet', 'Literature']
+      call s:ensure_directory(s:quicknote_path(l:directory))
+    endfor
+
+    call s:copy_templates()
+    echo 'QuickNote initialized: ' . s:quicknote_root
+  catch
+    call s:show_error('NoteInit failed: ' . v:exception)
+  endtry
 endfunction
 
 function! s:open_wiki_link() abort
@@ -340,6 +365,27 @@ function! s:ensure_directory(path) abort
   if !isdirectory(a:path)
     call mkdir(a:path, 'p')
   endif
+  if !isdirectory(a:path)
+    throw 'Could not create directory: ' . a:path
+  endif
+endfunction
+
+function! s:copy_templates() abort
+  let l:source_dir = s:repo_path('Templates')
+  let l:target_dir = s:quicknote_path('Templates')
+
+  if !isdirectory(l:source_dir)
+    throw 'Template directory not found: ' . l:source_dir
+  endif
+
+  call s:ensure_directory(l:target_dir)
+  for l:name in readdir(l:source_dir)
+    let l:source = l:source_dir . '/' . l:name
+    let l:target = l:target_dir . '/' . l:name
+    if filereadable(l:source) && !filereadable(l:target)
+      call writefile(readfile(l:source), l:target)
+    endif
+  endfor
 endfunction
 
 function! s:create_basic_note(filepath, title) abort
