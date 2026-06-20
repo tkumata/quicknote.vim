@@ -20,14 +20,6 @@ function! s:repo_path(...) abort
   return join([s:quicknote_repo_root] + a:000, '/')
 endfunction
 
-" Vimwiki
-let g:vimwiki_list = [{
-  \ 'path': s:quicknote_root . '/',
-  \ 'syntax': 'markdown',
-  \ 'ext': '.md'
-  \}]
-let g:vimwiki_key_mappings = { 'all_maps': 0 }
-
 " fzf
 let $FZF_DEFAULT_COMMAND = 'find ' . shellescape(s:quicknote_root) . ' -type f -name "*.md"'
 
