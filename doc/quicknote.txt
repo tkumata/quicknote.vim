@@ -2,7 +2,6 @@ Installation and Setup
 
 1. `:PlugInstall`
 2. `:NoteInit`
-3. `:NoteToday`
 
 For example,
 >
