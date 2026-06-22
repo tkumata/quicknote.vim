@@ -449,9 +449,11 @@ function! s:note_help() abort
     return
   endif
 
+  let l:previous_window = winnr('#')
   call fzf#run(fzf#wrap('NoteHelp', {
     \ 'source': s:note_help_lines(),
     \ 'sink': function('<SID>ignore_selection'),
+    \ 'exit': function('<SID>restore_previous_window', [l:previous_window]),
     \ 'options': '--prompt=NoteHelp> '
     \ }))
 endfunction
@@ -901,7 +903,7 @@ function! s:open_note_from_picker(previous_window, file) abort
   call s:restore_previous_window(a:previous_window)
 endfunction
 
-function! s:restore_previous_window(previous_window) abort
+function! s:restore_previous_window(previous_window, ...) abort
   let l:current_window = winnr()
   if a:previous_window <= 0 || a:previous_window > winnr('$') || a:previous_window == l:current_window
     return
