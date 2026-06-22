@@ -454,7 +454,7 @@ function! s:note_help() abort
     \ 'source': s:note_help_lines(),
     \ 'sink': function('<SID>ignore_selection'),
     \ 'exit': function('<SID>restore_previous_window', [l:previous_window]),
-    \ 'options': '--prompt=NoteHelp> '
+    \ 'options': ['--prompt=NoteHelp> ']
     \ }))
 endfunction
 
