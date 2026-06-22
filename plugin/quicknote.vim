@@ -45,6 +45,7 @@ command! NoteRandom call s:note_random()
 command! NoteBrokenLinks call s:note_broken_links()
 command! -nargs=1 NoteTag call s:note_tag(<q-args>)
 command! NoteTags call s:note_tags()
+command! NoteHelp call s:note_help()
 
 function! s:pair(open, close) abort
   return a:open . a:close . "\<Left>"
@@ -440,6 +441,42 @@ function! s:note_tags() abort
     \ 'sink': function('<SID>open_tag_from_picker', [l:previous_window]),
     \ 'options': '--prompt=NoteTags> '
     \ }))
+endfunction
+
+function! s:note_help() abort
+  if !s:has_fzf_picker()
+    call s:show_error('FZF is required for :NoteHelp')
+    return
+  endif
+
+  call fzf#run(fzf#wrap('NoteHelp', {
+    \ 'source': s:note_help_lines(),
+    \ 'sink': function('<SID>ignore_selection'),
+    \ 'options': '--prompt=NoteHelp> '
+    \ }))
+endfunction
+
+function! s:note_help_lines() abort
+  return [
+    \ ':NoteInit                    QuickNote root と標準ディレクトリ、template を初期化する',
+    \ ':NoteToday                   今日の Daily note を開く',
+    \ ':NoteLiterature {name}       指定名の Literature note を開く',
+    \ ':NoteFleet {name}            指定名の Fleet note を開く',
+    \ ':NoteSearch                  markdown note をファイル名から検索して開く',
+    \ ':NoteGrep [query]            note 本文を検索して該当行を開く',
+    \ ':NoteBacklinks               現在の note への wiki link を検索する',
+    \ ':NoteUnlinkedMentions        現在の note 名の未リンク言及を検索する',
+    \ ':NoteOrphans                 backlink のない note を検索する',
+    \ ':NoteRelated                 現在の note と tag が共通する note を検索する',
+    \ ':NoteRandom                  対象 note から1件をランダムに開く',
+    \ ':NoteBrokenLinks             存在しない wiki link を検索する',
+    \ ':NoteTag {tag}               指定 tag を持つ note を検索する',
+    \ ':NoteTags                    tag を選択して該当 note を検索する',
+    \ ':NoteHelp                    QuickNote コマンド一覧を表示する'
+    \ ]
+endfunction
+
+function! s:ignore_selection(selection) abort
 endfunction
 
 function! s:open_tag_from_picker(previous_window, tag) abort
