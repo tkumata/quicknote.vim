@@ -38,6 +38,10 @@ command! -nargs=1 NoteFleet call s:open_collection_note('Fleet', <q-args>)
 command! NoteSearch call s:note_search()
 command! -nargs=* NoteGrep call s:note_grep(<q-args>)
 command! NoteBacklinks call s:note_backlinks()
+command! NoteUnlinkedMentions call s:note_unlinked_mentions()
+command! NoteOrphans call s:note_orphans()
+command! NoteRelated call s:note_related()
+command! NoteRandom call s:note_random()
 command! NoteBrokenLinks call s:note_broken_links()
 command! -nargs=1 NoteTag call s:note_tag(<q-args>)
 command! NoteTags call s:note_tags()
@@ -267,6 +271,115 @@ function! s:note_backlinks() abort
     \ }))
 endfunction
 
+function! s:note_unlinked_mentions() abort
+  if !s:has_fzf_picker()
+    call s:show_error('FZF is required for :NoteUnlinkedMentions')
+    return
+  endif
+
+  if !s:is_discovery_note_file()
+    call s:show_error('Current buffer is not an eligible QuickNote markdown file')
+    return
+  endif
+
+  let l:names = s:current_note_names()
+  let l:files = s:discovery_markdown_files()
+  if v:shell_error != 0
+    call s:show_error('find failed for :NoteUnlinkedMentions')
+    return
+  endif
+
+  let l:results = s:unlinked_mention_results(l:files, expand('%:p'), l:names)
+  if empty(l:results)
+    echo 'No unlinked mentions: ' . join(l:names, ', ')
+    return
+  endif
+
+  let l:previous_window = winnr('#')
+  call fzf#run(fzf#wrap('NoteUnlinkedMentions', {
+    \ 'source': l:results,
+    \ 'sink': function('<SID>open_grep_result', [l:previous_window]),
+    \ 'options': ['--prompt=NoteUnlinkedMentions> ', '--delimiter=:', '--nth=1,2,3..']
+    \ }))
+endfunction
+
+function! s:note_orphans() abort
+  if !s:has_fzf_picker()
+    call s:show_error('FZF is required for :NoteOrphans')
+    return
+  endif
+
+  let l:files = s:discovery_markdown_files()
+  if v:shell_error != 0
+    call s:show_error('find failed for :NoteOrphans')
+    return
+  endif
+
+  let l:source = s:orphan_note_files(l:files)
+  if empty(l:source)
+    echo 'No orphan notes'
+    return
+  endif
+
+  let l:previous_window = winnr('#')
+  call fzf#run(fzf#wrap('NoteOrphans', {
+    \ 'source': l:source,
+    \ 'sink': function('<SID>open_note_from_picker', [l:previous_window]),
+    \ 'options': '--prompt=NoteOrphans> '
+    \ }))
+endfunction
+
+function! s:note_related() abort
+  if !s:has_fzf_picker()
+    call s:show_error('FZF is required for :NoteRelated')
+    return
+  endif
+
+  if !s:is_discovery_note_file()
+    call s:show_error('Current buffer is not an eligible QuickNote markdown file')
+    return
+  endif
+
+  let l:tags = s:frontmatter_tags(expand('%:p'))
+  if empty(l:tags)
+    echo 'Current note has no tags'
+    return
+  endif
+
+  let l:files = s:discovery_markdown_files()
+  if v:shell_error != 0
+    call s:show_error('find failed for :NoteRelated')
+    return
+  endif
+
+  let l:source = s:related_note_files(l:files, expand('%:p'), l:tags)
+  if empty(l:source)
+    echo 'No related notes'
+    return
+  endif
+
+  let l:previous_window = winnr('#')
+  call fzf#run(fzf#wrap('NoteRelated', {
+    \ 'source': l:source,
+    \ 'sink': function('<SID>open_note_from_picker', [l:previous_window]),
+    \ 'options': '--prompt=NoteRelated> '
+    \ }))
+endfunction
+
+function! s:note_random() abort
+  let l:files = s:discovery_markdown_files()
+  if v:shell_error != 0
+    call s:show_error('find failed for :NoteRandom')
+    return
+  endif
+  if empty(l:files)
+    echo 'No notes available for :NoteRandom'
+    return
+  endif
+
+  execute 'edit ' . fnameescape(l:files[rand() % len(l:files)])
+endfunction
+
 function! s:note_broken_links() abort
   if !s:has_fzf_picker()
     call s:show_error('FZF is required for :NoteBrokenLinks')
@@ -426,6 +539,10 @@ function! s:is_quicknote_markdown_file() abort
   return l:filepath[:strlen(l:root) - 1] ==# l:root
 endfunction
 
+function! s:is_discovery_note_file() abort
+  return s:is_quicknote_markdown_file() && !s:is_discovery_excluded_path(expand('%:p'))
+endfunction
+
 function! s:first_markdown_title() abort
   for l:line in getline(1, '$')
     if l:line =~# '^#\s\+'
@@ -463,6 +580,111 @@ function! s:unique_lines(lines) abort
   endfor
 
   return l:unique
+endfunction
+
+function! s:unlinked_mention_results(files, current_file, names) abort
+  let l:current_file = fnamemodify(a:current_file, ':p')
+  let l:results = []
+
+  for l:file in a:files
+    if fnamemodify(l:file, ':p') ==# l:current_file || !filereadable(l:file)
+      continue
+    endif
+
+    try
+      let l:lines = readfile(l:file)
+    catch
+      continue
+    endtry
+
+    for l:index in range(len(l:lines))
+      let l:text = s:line_without_wiki_links(l:lines[l:index])
+      for l:name in a:names
+        if stridx(l:text, l:name) >= 0
+          call add(l:results, l:file . ':' . (l:index + 1) . ':' . l:lines[l:index])
+          break
+        endif
+      endfor
+    endfor
+  endfor
+
+  return s:unique_lines(l:results)
+endfunction
+
+function! s:line_without_wiki_links(line) abort
+  return substitute(a:line, '\[\[.\{-}\]\]', '', 'g')
+endfunction
+
+function! s:orphan_note_files(files) abort
+  " ponytail: scan per candidate; build an incoming-name index only if Vault size makes this slow.
+  let l:orphans = []
+  for l:file in a:files
+    let l:names = s:note_names_from_file(l:file)
+    if !empty(l:names) && !s:has_backlink(a:files, l:file, l:names)
+      call add(l:orphans, l:file)
+    endif
+  endfor
+  return sort(l:orphans)
+endfunction
+
+function! s:note_names_from_file(file) abort
+  if !filereadable(a:file)
+    return []
+  endif
+
+  try
+    let l:lines = readfile(a:file)
+  catch
+    return []
+  endtry
+
+  let l:names = [s:note_title_from_name(fnamemodify(a:file, ':t'))]
+  for l:line in l:lines
+    if l:line =~# '^#\s\+'
+      call add(l:names, s:trim(substitute(l:line, '^#\s\+', '', '')))
+      break
+    endif
+  endfor
+  return s:unique_trimmed_values(l:names)
+endfunction
+
+function! s:has_backlink(files, candidate, names) abort
+  let l:candidate = fnamemodify(a:candidate, ':p')
+  for l:file in a:files
+    if fnamemodify(l:file, ':p') ==# l:candidate || !filereadable(l:file)
+      continue
+    endif
+
+    try
+      let l:text = join(readfile(l:file), "\n")
+    catch
+      continue
+    endtry
+
+    for l:name in a:names
+      if stridx(l:text, '[[' . l:name . ']]') >= 0
+        return 1
+      endif
+    endfor
+  endfor
+  return 0
+endfunction
+
+function! s:related_note_files(files, current_file, tags) abort
+  let l:current_file = fnamemodify(a:current_file, ':p')
+  let l:related = []
+  for l:file in a:files
+    if fnamemodify(l:file, ':p') ==# l:current_file
+      continue
+    endif
+    for l:tag in s:frontmatter_tags(l:file)
+      if index(a:tags, l:tag) >= 0
+        call add(l:related, l:file)
+        break
+      endif
+    endfor
+  endfor
+  return sort(s:unique_lines(l:related))
 endfunction
 
 function! s:broken_link_results(files) abort
@@ -601,6 +823,22 @@ endfunction
 
 function! s:markdown_find_command() abort
   return 'find ' . shellescape(s:quicknote_root) . ' -type f -name ' . shellescape('*.md')
+endfunction
+
+function! s:discovery_markdown_files() abort
+  return filter(systemlist(s:markdown_find_command()), '!s:is_discovery_excluded_path(v:val)')
+endfunction
+
+function! s:is_discovery_excluded_path(path) abort
+  let l:path = fnamemodify(a:path, ':p')
+  let l:root = substitute(fnamemodify(s:quicknote_root, ':p'), '/$', '', '')
+  for l:directory in ['Daily', 'Templates']
+    let l:prefix = l:root . '/' . l:directory . '/'
+    if l:path[:strlen(l:prefix) - 1] ==# l:prefix
+      return 1
+    endif
+  endfor
+  return 0
 endfunction
 
 function! s:grep_command(query) abort
