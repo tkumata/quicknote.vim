@@ -31,7 +31,7 @@ let s:previous_window = winnr('#')
 NoteHelp
 
 call assert_equal(15, len(g:note_help_spec.source))
-call assert_equal('--prompt=NoteHelp> ', g:note_help_spec.options)
+call assert_equal(['--prompt=NoteHelp> '], g:note_help_spec.options)
 call assert_equal(s:window, winnr())
 call assert_equal(s:previous_window, winnr('#'))
 for s:command in [
