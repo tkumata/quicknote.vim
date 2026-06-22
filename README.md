@@ -1,6 +1,8 @@
 # Quick Note
 
-Quick Note は、Vim 上で Obsidian 風のノート運用を行うためのプラグインです。また、このプラグインで既存の Obsidian Vault ディレクトリ以下を開くことが可能で、Obsidian Vault ディレクトリ配下を汚染することなくノート運用が可能です。本プラグインと Obsidian で同一 Vault を操作できます。
+Quick Note は、Vim 上で Obsidian 風のノート運用を行うためのプラグインです。このプラグインで既存の Obsidian Vault ディレクトリ以下を開くことが可能で、Obsidian Vault ディレクトリ配下を汚染することなくノート運用が可能です。本プラグインと Obsidian で同一 Vault を操作できます。
+
+PKB も視野に入れ、PKB 運用に必要なコマンドも実装しています。
 
 ![screenshot 1](./doc/quicknote-screenshot.png)
 ![screenshot 2](./doc/quicknote-screenshot-2.png)
@@ -167,14 +169,14 @@ vim 上で以下を実行します。
 :NoteInit
 ```
 
-開きたいディレクトリに移動して Vim を再起動します。
+開きたいディレクトリに移動して Vim を起動します。
 
 ```shell
 cd ~/Documents/QuickNote
 vim
 ```
 
-もしあなたが `~/Documents/Obsidian` で運用していたら、`quicknote_root` を変更すればそのまま運用できます。
+もしあなたが `~/Documents/Obsidian` で運用していたら、`quicknote_root` を変更します。
 
 ## wiki link の開き方
 
