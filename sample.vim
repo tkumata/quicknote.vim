@@ -9,6 +9,9 @@ let g:vimwiki_list = [{
   \}]
 let g:vimwiki_key_mappings = { 'all_maps': 0 }
 
+" Copilot model, default is 'gpt-4o-copilot'
+let g:copilot_settings = { 'selectedCompletionModel': 'gpt-41-copilot' }
+
 " Plugins
 call plug#begin('~/.vim/plugged')
   Plug 'preservim/nerdtree'
