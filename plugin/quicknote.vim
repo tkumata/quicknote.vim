@@ -33,7 +33,7 @@ augroup END
 
 command! NoteToday call s:open_daily_note()
 command! NoteInit call s:note_init()
-command! -nargs=1 NoteLiterature call s:create_literature_note(<f-args>)
+command! -nargs=1 NoteLiterature call s:open_collection_note('Literature', <q-args>)
 command! -nargs=1 NoteFleet call s:open_collection_note('Fleet', <q-args>)
 command! NoteSearch call s:note_search()
 command! -nargs=* NoteGrep call s:note_grep(<q-args>)
@@ -136,37 +136,6 @@ function! s:open_daily_note() abort
   call s:jump_to_cursor_token()
 endfunction
 
-function! s:create_literature_note(name) abort
-  let l:target_dir = s:quicknote_path('Literature')
-  let l:filename = s:normalize_note_name(a:name)
-  if empty(l:filename)
-    call s:show_error('Note name is empty')
-    return
-  endif
-
-  let l:title = s:note_title_from_name(l:filename)
-  let l:filepath = s:quicknote_path('Literature', l:filename)
-  let l:template = s:template_path('Literature.md')
-
-  call s:ensure_directory(l:target_dir)
-
-  if !filereadable(l:filepath)
-    if filereadable(l:template)
-      call s:write_template(l:template, l:filepath, l:title)
-      echo 'Note created: ' . l:filepath
-    else
-      echohl ErrorMsg
-      echom 'Template not found: ' . l:template
-      echohl None
-      return
-    endif
-  else
-    echo 'Note already exists: ' . l:filepath
-  endif
-
-  execute 'edit ' . fnameescape(l:filepath)
-endfunction
-
 function! s:open_collection_note(collection, name) abort
   let l:filename = s:normalize_note_name(a:name)
   if empty(l:filename)
@@ -177,11 +146,18 @@ function! s:open_collection_note(collection, name) abort
   let l:title = s:note_title_from_name(l:filename)
   let l:target_dir = s:quicknote_path(a:collection)
   let l:filepath = s:quicknote_path(a:collection, l:filename)
+  let l:template = s:template_path(a:collection . '.md')
 
   call s:ensure_directory(l:target_dir)
 
   if !filereadable(l:filepath)
-    call s:create_basic_note(l:filepath, l:title)
+    if !filereadable(l:template)
+      echohl ErrorMsg
+      echom 'Template not found: ' . l:template
+      echohl None
+      return
+    endif
+    call s:write_template(l:template, l:filepath, l:title)
     echo 'Note created: ' . l:filepath
   else
     echo 'Note already exists: ' . l:filepath
@@ -530,10 +506,6 @@ function! s:copy_templates() abort
       call writefile(readfile(l:source), l:target)
     endif
   endfor
-endfunction
-
-function! s:create_basic_note(filepath, title) abort
-  call writefile(['# ' . a:title, '', 'Created: ' . strftime('%Y-%m-%d %H:%M'), ''], a:filepath)
 endfunction
 
 function! s:write_template(template, filepath, title) abort
